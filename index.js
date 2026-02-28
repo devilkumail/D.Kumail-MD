@@ -172,6 +172,28 @@ async function main() {
   process.on("SIGTERM", () => shutdownHandler("SIGTERM"));
 
   await botManager.initializeBots();
+
+  for (const [sessionId, bot] of botManager.bots.entries()) {
+    if (bot.sock) {
+      const origSend = bot.sock.sendMessage.bind(bot.sock);
+      bot.sock.sendMessage = async function(jid, content, ...args) {
+        if (content && content.text && typeof content.text === "string") {
+          content.text = content.text
+            .replace(/[Rr]agnarok[\s-]*[Mm][Dd]/gi, "D.Kumail MD")
+            .replace(/[Rr]agnarok/gi, "D.Kumail MD")
+            .replace(/[Rr]aganork/gi, "D.Kumail MD");
+        }
+        if (content && content.caption && typeof content.caption === "string") {
+          content.caption = content.caption
+            .replace(/[Rr]agnarok[\s-]*[Mm][Dd]/gi, "D.Kumail MD")
+            .replace(/[Rr]agnarok/gi, "D.Kumail MD")
+            .replace(/[Rr]aganork/gi, "D.Kumail MD");
+        }
+        return origSend(jid, content, ...args);
+      };
+    }
+  }
+
   console.log("- Bot initialization complete.");
   logger.info("Bot initialization complete");
 
