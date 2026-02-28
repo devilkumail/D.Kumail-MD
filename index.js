@@ -35,19 +35,26 @@ try {
     if (!this.sessionData.creds || Object.keys(this.sessionData.creds).length === 0) {
       console.log(`- [${this.sessionId}] Auth state empty after fetch, loading from database...`);
       try {
-        const { WhatsappSession } = require("./core/database");
+        const { sequelize } = require("./config");
+        const { QueryTypes } = require("sequelize");
+
         const keysToTry = [`creds-${this.sessionId}`, `${this.sessionId}-creds`, "creds"];
         let credsData = null;
 
         for (const key of keysToTry) {
-          const row = await WhatsappSession.findOne({ where: { sessionId: key } });
-          if (row) {
-            const data = row.sessionData;
-            if (data && typeof data === "object" && Object.keys(data).length > 0) {
-              credsData = data;
+          const rows = await sequelize.query(
+            'SELECT "sessionData" FROM "WhatsappSessions" WHERE "sessionId" = :sid LIMIT 1',
+            { replacements: { sid: key }, type: QueryTypes.SELECT }
+          );
+          if (rows.length > 0 && rows[0].sessionData) {
+            try {
+              credsData = typeof rows[0].sessionData === "string" ? JSON.parse(rows[0].sessionData) : rows[0].sessionData;
+            } catch { credsData = null; }
+            if (credsData && typeof credsData === "object" && Object.keys(credsData).length > 0) {
               console.log(`  ✓ Found creds in DB key: ${key}`);
               break;
             }
+            credsData = null;
           }
         }
 
