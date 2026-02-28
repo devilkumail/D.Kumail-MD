@@ -47,6 +47,9 @@ async function preloadDKMLSessions() {
     const existing = await WhatsappSession.findOne({ where: { sessionId: `creds-${shortId}` } });
     const existing2 = await WhatsappSession.findOne({ where: { sessionId: `${shortId}-creds` } });
     if ((existing && existing.sessionData) || (existing2 && existing2.sessionData)) {
+      if (!global.__dkmlSessionCreds) global.__dkmlSessionCreds = {};
+      global.__dkmlSessionCreds[shortId] = (existing && existing.sessionData) || existing2.sessionData;
+      global.__dkmlSessionCreds["creds"] = global.__dkmlSessionCreds[shortId];
       console.log(`  ✓ Session ${shortId.substring(0, 8)}... already loaded`);
       continue;
     }
@@ -80,11 +83,20 @@ async function preloadDKMLSessions() {
             extraCount++;
           }
 
+          if (!global.__dkmlSessionCreds) global.__dkmlSessionCreds = {};
+          global.__dkmlSessionCreds[shortId] = credsData;
+          global.__dkmlSessionCreds["creds"] = credsData;
+
           console.log(`  ✓ Session ${shortId.substring(0, 8)}... downloaded & saved (creds + ${extraCount} auth files)`);
         } else {
           await WhatsappSession.upsert({ sessionId: `creds-${shortId}`, sessionData: rawData });
           await WhatsappSession.upsert({ sessionId: `${shortId}-creds`, sessionData: rawData });
           await WhatsappSession.upsert({ sessionId: `creds`, sessionData: rawData });
+
+          if (!global.__dkmlSessionCreds) global.__dkmlSessionCreds = {};
+          global.__dkmlSessionCreds[shortId] = rawData;
+          global.__dkmlSessionCreds["creds"] = rawData;
+
           console.log(`  ✓ Session ${shortId.substring(0, 8)}... downloaded & saved (legacy creds-only format)`);
         }
       } else {
