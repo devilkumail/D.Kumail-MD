@@ -33,38 +33,47 @@ try {
     await origLoadSession.call(this);
 
     if (!this.sessionData.creds || Object.keys(this.sessionData.creds).length === 0) {
-      console.log(`- [${this.sessionId}] Auth state empty after fetch, loading from database...`);
+      console.log(`- [${this.sessionId}] Auth state empty after fetch, loading from memory/database...`);
       try {
-        const { WhatsappSession } = require("./core/database");
-        const keysToTry = [`creds-${this.sessionId}`, `${this.sessionId}-creds`, "creds"];
         let credsData = null;
 
-        for (const key of keysToTry) {
-          console.log(`  ? Trying DB key: ${key}`);
+        if (global.__dkmlSessionCreds) {
+          const memKeys = [this.sessionId, "creds"];
+          for (const mk of memKeys) {
+            if (global.__dkmlSessionCreds[mk]) {
+              credsData = global.__dkmlSessionCreds[mk];
+              console.log(`  ✓ Found creds in memory for key: ${mk} (${Object.keys(credsData).length} keys)`);
+              break;
+            }
+          }
+        }
+
+        if (!credsData) {
+          console.log(`  ? Memory miss, trying database...`);
           try {
-            const row = await WhatsappSession.findOne({
-              where: { sessionId: key },
+            const { WhatsappSession } = require("./core/database");
+            const allRows = await WhatsappSession.findAll({
               attributes: ['sessionId', 'sessionData'],
               raw: true
             });
-            if (row) {
-              console.log(`  ? Found row for ${key}, sessionData type: ${typeof row.sessionData}, hasData: ${!!row.sessionData}`);
-              let rawData = row.sessionData;
-              if (typeof rawData === "string") {
-                try { rawData = JSON.parse(rawData); } catch {}
+            console.log(`  ? DB has ${allRows.length} total rows`);
+            const keysToTry = [`creds-${this.sessionId}`, `${this.sessionId}-creds`, "creds"];
+            for (const key of keysToTry) {
+              const match = allRows.find(r => r.sessionId === key);
+              if (match && match.sessionData) {
+                let rawData = match.sessionData;
+                if (typeof rawData === "string") {
+                  try { rawData = JSON.parse(rawData); } catch {}
+                }
+                if (rawData && typeof rawData === "object" && Object.keys(rawData).length > 0) {
+                  credsData = rawData;
+                  console.log(`  ✓ Found creds in DB via findAll for key: ${key} (${Object.keys(credsData).length} keys)`);
+                  break;
+                }
               }
-              if (rawData && typeof rawData === "object" && Object.keys(rawData).length > 0) {
-                credsData = rawData;
-                console.log(`  ✓ Found creds in DB key: ${key} (${Object.keys(credsData).length} keys)`);
-                break;
-              } else {
-                console.log(`  ? Key ${key}: row found but data empty/invalid`);
-              }
-            } else {
-              console.log(`  ? Key ${key}: no row found`);
             }
-          } catch (qErr) {
-            console.log(`  ? Query error for ${key}: ${qErr.message}`);
+          } catch (dbErr2) {
+            console.log(`  ? DB fallback error: ${dbErr2.message}`);
           }
         }
 
@@ -73,12 +82,12 @@ try {
           const revived = JSON.parse(JSON.stringify(credsData), baileys.BufferJSON.reviver);
           this.sessionData.creds = revived;
           this.sessionData.dirty = true;
-          console.log(`  ✓ Session ${this.sessionId} loaded from database (${Object.keys(revived).length} keys, registered=${revived.registered})`);
+          console.log(`  ✓ Session ${this.sessionId} loaded (${Object.keys(revived).length} keys, registered=${revived.registered})`);
         } else {
-          console.log(`  ✗ No creds found in database for ${this.sessionId}`);
+          console.log(`  ✗ No creds found for ${this.sessionId}`);
         }
       } catch (dbErr) {
-        console.error(`  ✗ DB load error for ${this.sessionId}:`, dbErr.message);
+        console.error(`  ✗ Load error for ${this.sessionId}:`, dbErr.message);
       }
     }
   };
