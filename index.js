@@ -35,40 +35,33 @@ try {
     if (!this.sessionData.creds || Object.keys(this.sessionData.creds).length === 0) {
       console.log(`- [${this.sessionId}] Auth state empty after fetch, loading from database...`);
       try {
-        const { sequelize } = require("./config");
+        const { WhatsappSession } = require("./core/database");
         const keysToTry = [`creds-${this.sessionId}`, `${this.sessionId}-creds`, "creds"];
         let credsData = null;
-
-        const tables = await sequelize.query("SELECT name FROM sqlite_master WHERE type='table'", { type: sequelize.QueryTypes ? sequelize.QueryTypes.SELECT : "SELECT" });
-        const tableNames = tables.map(t => t.name || t.tbl_name);
-        console.log(`  ? Tables in DB: ${tableNames.join(", ")}`);
-
-        const tableName = tableNames.find(t => t.toLowerCase().includes("whatsapp")) || "WhatsappSessions";
-        console.log(`  ? Using table: ${tableName}`);
 
         for (const key of keysToTry) {
           console.log(`  ? Trying DB key: ${key}`);
           try {
-            const rows = await sequelize.query(
-              `SELECT sessionData FROM "${tableName}" WHERE sessionId = ?`,
-              { replacements: [key], type: "SELECT" }
-            );
-            const resultRows = Array.isArray(rows[0]) ? rows[0] : rows;
-            if (resultRows.length > 0 && resultRows[0].sessionData) {
-              console.log(`  ? Found row, data type: ${typeof resultRows[0].sessionData}, preview: ${String(resultRows[0].sessionData).substring(0, 80)}`);
-              try {
-                credsData = typeof resultRows[0].sessionData === "string" ? JSON.parse(resultRows[0].sessionData) : resultRows[0].sessionData;
-              } catch (parseErr) {
-                console.log(`  ? Parse error: ${parseErr.message}`);
-                credsData = null;
+            const row = await WhatsappSession.findOne({
+              where: { sessionId: key },
+              attributes: ['sessionId', 'sessionData'],
+              raw: true
+            });
+            if (row) {
+              console.log(`  ? Found row for ${key}, sessionData type: ${typeof row.sessionData}, hasData: ${!!row.sessionData}`);
+              let rawData = row.sessionData;
+              if (typeof rawData === "string") {
+                try { rawData = JSON.parse(rawData); } catch {}
               }
-              if (credsData && typeof credsData === "object" && Object.keys(credsData).length > 0) {
+              if (rawData && typeof rawData === "object" && Object.keys(rawData).length > 0) {
+                credsData = rawData;
                 console.log(`  ✓ Found creds in DB key: ${key} (${Object.keys(credsData).length} keys)`);
                 break;
+              } else {
+                console.log(`  ? Key ${key}: row found but data empty/invalid`);
               }
-              credsData = null;
             } else {
-              console.log(`  ? Key ${key}: no data (${resultRows.length} rows)`);
+              console.log(`  ? Key ${key}: no row found`);
             }
           } catch (qErr) {
             console.log(`  ? Query error for ${key}: ${qErr.message}`);
